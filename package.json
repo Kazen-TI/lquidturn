@@ -4,8 +4,8 @@
   "description": "Sistema de turnos para liquidación de gastos de vendedores Kazen",
   "main": "server.js",
   "scripts": {
-    "start": "node --env-file-if-exists=.env server.js",
-    "dev": "node --env-file-if-exists=.env server.js"
+    "start": "node server.js",
+    "dev": "node server.js"
   },
   "engines": {
     "node": ">=18"
