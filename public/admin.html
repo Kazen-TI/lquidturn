@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Panel del liquidador · LiquidTurn</title>
+  <meta name="theme-color" content="#0f172a" />
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100">
+  <!-- Login -->
+  <div id="login" class="min-h-screen flex items-center justify-center p-4">
+    <form id="loginForm" class="w-full max-w-sm bg-slate-900 rounded-2xl p-6 border border-slate-800 shadow-xl">
+      <h1 class="text-2xl font-bold mb-1">Panel del liquidador</h1>
+      <p class="text-slate-400 text-sm mb-5">Ingresa el PIN para continuar</p>
+      <input id="pin" type="password" inputmode="numeric" required
+        class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-center text-2xl tracking-widest focus:outline-none focus:border-amber-500"
+        placeholder="••••" />
+      <button class="w-full mt-4 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold py-3 px-4 rounded-lg">
+        Entrar
+      </button>
+      <p id="loginErr" class="text-rose-400 text-sm mt-3 hidden">PIN incorrecto</p>
+    </form>
+  </div>
+
+  <!-- Panel -->
+  <div id="panel" class="hidden">
+    <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur sticky top-0 z-10">
+      <div class="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div>
+          <h1 class="text-xl font-bold">LiquidTurn — Panel</h1>
+          <p class="text-xs text-slate-400" id="fechaHoy"></p>
+        </div>
+        <div class="flex items-center gap-2">
+          <span id="conn" class="inline-flex items-center gap-1.5 text-xs text-slate-400">
+            <span class="w-2 h-2 rounded-full bg-slate-500"></span>
+            Conectando…
+          </span>
+          <button id="btnLogout" class="text-xs text-slate-400 hover:text-slate-200 ml-3">Salir</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="max-w-5xl mx-auto px-4 py-6 space-y-6">
+      <!-- Métricas -->
+      <div class="grid grid-cols-3 gap-3">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+          <p class="text-xs text-slate-400 uppercase tracking-wider">En espera</p>
+          <p id="mEspera" class="text-4xl font-bold mt-1">0</p>
+        </div>
+        <div class="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4">
+          <p class="text-xs text-amber-300 uppercase tracking-wider">Atendiendo</p>
+          <p id="mAtendiendo" class="text-4xl font-bold mt-1 text-amber-400">0</p>
+        </div>
+        <div class="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-4">
+          <p class="text-xs text-emerald-300 uppercase tracking-wider">Atendidos hoy</p>
+          <p id="mTerminados" class="text-4xl font-bold mt-1 text-emerald-400">0</p>
+        </div>
+      </div>
+
+      <!-- Turno en atención -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+        <div class="px-5 py-3 border-b border-slate-800 flex items-center justify-between">
+          <h2 class="font-semibold text-slate-300">Turno actual</h2>
+        </div>
+        <div id="actualBox" class="p-5">
+          <p class="text-slate-500">Nadie en atención.</p>
+        </div>
+        <div class="px-5 py-4 border-t border-slate-800 bg-slate-900/60 flex flex-col sm:flex-row gap-2">
+          <button id="btnLlamar"
+            class="flex-1 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold py-3 px-4 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed">
+            ▶ Llamar al siguiente
+          </button>
+          <button id="btnTerminar"
+            class="flex-1 bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-semibold py-3 px-4 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed">
+            ✓ Terminar atención
+          </button>
+        </div>
+        <p id="adminErr" class="hidden px-5 pb-4 text-rose-400 text-sm"></p>
+      </div>
+
+      <!-- Lista de espera -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+        <div class="px-5 py-3 border-b border-slate-800 flex items-center justify-between">
+          <h2 class="font-semibold text-slate-300">Lista de espera</h2>
+          <button id="btnReset" class="text-xs text-slate-500 hover:text-rose-400">Reiniciar día</button>
+        </div>
+        <div id="espera" class="divide-y divide-slate-800">
+          <p class="text-slate-500 px-5 py-6 text-center">Sin vendedores en espera.</p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    let pin = sessionStorage.getItem('liquidturn_pin') || '';
+
+    const $ = (sel) => document.querySelector(sel);
+    const loginView = $('#login');
+    const panelView = $('#panel');
+    const errLogin = $('#loginErr');
+    const errAdmin = $('#adminErr');
+
+    function mostrarPanel() {
+      loginView.classList.add('hidden');
+      panelView.classList.remove('hidden');
+      $('#fechaHoy').textContent = new Date().toLocaleDateString('es-MX', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+      });
+      conectarStream();
+      cargarEstado();
+    }
+
+    function logout() {
+      sessionStorage.removeItem('liquidturn_pin');
+      location.reload();
+    }
+    $('#btnLogout').onclick = logout;
+
+    $('#loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const v = $('#pin').value;
+      const r = await fetch('/api/admin/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: v }),
+      });
+      if (!r.ok) {
+        errLogin.classList.remove('hidden');
+        return;
+      }
+      pin = v;
+      sessionStorage.setItem('liquidturn_pin', pin);
+      mostrarPanel();
+    });
+
+    if (pin) {
+      // Validar PIN guardado intentando cargar estado
+      fetch('/api/admin/estado', { headers: { 'x-admin-pin': pin } }).then(r => {
+        if (r.ok) mostrarPanel();
+        else { sessionStorage.removeItem('liquidturn_pin'); pin = ''; }
+      });
+    }
+
+    async function cargarEstado() {
+      try {
+        const r = await fetch('/api/admin/estado', { headers: { 'x-admin-pin': pin } });
+        if (!r.ok) {
+          if (r.status === 401) return logout();
+          return;
+        }
+        const data = await r.json();
+        renderEstado(data);
+      } catch (e) { console.error(e); }
+    }
+
+    function renderEstado({ resumen, atendiendo, espera }) {
+      $('#mEspera').textContent = resumen.espera;
+      $('#mAtendiendo').textContent = resumen.atendiendo;
+      $('#mTerminados').textContent = resumen.terminados;
+
+      const box = $('#actualBox');
+      if (atendiendo) {
+        box.innerHTML = `
+          <div class="flex items-center gap-4">
+            <div class="w-20 h-20 rounded-2xl bg-amber-500 text-slate-900 flex items-center justify-center text-3xl font-bold">
+              ${atendiendo.numero}
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="text-xl font-semibold truncate">${escapeHTML(atendiendo.nombre)}</p>
+              <p class="text-slate-400">Ruta ${escapeHTML(atendiendo.ruta)}</p>
+              <p class="text-slate-500 text-sm mt-1">Cel: ${escapeHTML(atendiendo.celular)}</p>
+            </div>
+          </div>`;
+      } else {
+        box.innerHTML = `<p class="text-slate-500">Nadie en atención.</p>`;
+      }
+
+      // Botones
+      $('#btnLlamar').disabled = !!atendiendo || espera.length === 0;
+      $('#btnTerminar').disabled = !atendiendo;
+
+      // Lista
+      const lista = $('#espera');
+      if (espera.length === 0) {
+        lista.innerHTML = `<p class="text-slate-500 px-5 py-6 text-center">Sin vendedores en espera.</p>`;
+      } else {
+        lista.innerHTML = espera.map((t, i) => `
+          <div class="flex items-center gap-4 px-5 py-3 hover:bg-slate-800/40">
+            <div class="w-12 h-12 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-amber-400">
+              ${t.numero}
+            </div>
+            <div class="flex-1 min-w-0">
+              <p class="font-medium truncate">${escapeHTML(t.nombre)}</p>
+              <p class="text-sm text-slate-400">Ruta ${escapeHTML(t.ruta)} · ${escapeHTML(t.celular)}</p>
+            </div>
+            <span class="text-xs text-slate-500">${i === 0 ? 'Siguiente' : `${i} por delante`}</span>
+          </div>
+        `).join('');
+      }
+    }
+
+    function escapeHTML(s) {
+      return String(s).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      })[c]);
+    }
+
+    async function accionAdmin(path) {
+      errAdmin.classList.add('hidden');
+      const r = await fetch(path, { method: 'POST', headers: { 'x-admin-pin': pin } });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        errAdmin.textContent = data.error || 'Error en la operación';
+        errAdmin.classList.remove('hidden');
+      }
+      cargarEstado();
+    }
+
+    $('#btnLlamar').onclick = () => accionAdmin('/api/admin/llamar-siguiente');
+    $('#btnTerminar').onclick = () => accionAdmin('/api/admin/terminar');
+    $('#btnReset').onclick = () => {
+      if (confirm('¿Cancelar todos los turnos pendientes y reiniciar? Esto no se puede deshacer.')) {
+        accionAdmin('/api/admin/reiniciar-dia');
+      }
+    };
+
+    function conectarStream() {
+      const dot = $('#conn').querySelector('span');
+      const txt = $('#conn');
+      const es = new EventSource('/api/stream');
+      es.onopen = () => {
+        dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
+        txt.lastChild.textContent = ' En vivo';
+      };
+      es.onerror = () => {
+        dot.className = 'w-2 h-2 rounded-full bg-rose-500';
+        txt.lastChild.textContent = ' Reconectando…';
+      };
+      es.addEventListener('update', () => cargarEstado());
+    }
+
+    // Fallback de polling
+    setInterval(() => { if (!panelView.classList.contains('hidden')) cargarEstado(); }, 10000);
+  </script>
+</body>
+</html>

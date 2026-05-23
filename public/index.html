@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>LiquidTurn — Tomar turno</title>
+  <meta name="theme-color" content="#0f172a" />
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-slate-100 flex items-center justify-center p-4">
+  <div class="w-full max-w-md">
+    <div class="text-center mb-6">
+      <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-amber-500/20 border border-amber-500/40 mb-3">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+      </div>
+      <h1 class="text-3xl font-bold tracking-tight">LiquidTurn</h1>
+      <p class="text-slate-400 text-sm mt-1">Toma tu turno para liquidar gastos</p>
+    </div>
+
+    <form id="form" class="bg-slate-800/60 backdrop-blur rounded-2xl p-6 shadow-xl border border-slate-700 space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-slate-300 mb-1">Tu nombre</label>
+        <input id="nombre" name="nombre" type="text" required maxlength="80"
+          class="w-full bg-slate-900/60 border border-slate-600 rounded-lg px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+          placeholder="Ej. Juan Pérez" />
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-slate-300 mb-1">Ruta</label>
+        <input id="ruta" name="ruta" type="text" required maxlength="40"
+          class="w-full bg-slate-900/60 border border-slate-600 rounded-lg px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+          placeholder="Ej. Ruta Norte 03" />
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium text-slate-300 mb-1">Celular (10 dígitos)</label>
+        <input id="celular" name="celular" type="tel" required pattern="[0-9]{10}" maxlength="10" inputmode="numeric"
+          class="w-full bg-slate-900/60 border border-slate-600 rounded-lg px-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+          placeholder="5512345678" />
+        <p class="text-xs text-slate-500 mt-1">Te notificaremos por aquí cuando sea tu turno.</p>
+      </div>
+
+      <button id="btnSubmit" type="submit"
+        class="w-full bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold py-3 px-4 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed">
+        Tomar turno
+      </button>
+
+      <p id="error" class="text-rose-400 text-sm hidden"></p>
+    </form>
+
+    <p class="text-center text-xs text-slate-500 mt-4">Kazen · Sistema interno de liquidación</p>
+  </div>
+
+  <script>
+    const form = document.getElementById('form');
+    const btn = document.getElementById('btnSubmit');
+    const errEl = document.getElementById('error');
+    const celular = document.getElementById('celular');
+
+    // Solo dígitos en el celular
+    celular.addEventListener('input', () => {
+      celular.value = celular.value.replace(/\D/g, '').slice(0, 10);
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errEl.classList.add('hidden');
+      btn.disabled = true;
+      btn.textContent = 'Tomando turno...';
+      try {
+        const payload = {
+          nombre: document.getElementById('nombre').value.trim(),
+          ruta: document.getElementById('ruta').value.trim(),
+          celular: celular.value.trim(),
+        };
+        const r = await fetch('/api/tickets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'Error al crear turno');
+        location.href = `/turno.html?id=${data.ticket.id}`;
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.classList.remove('hidden');
+        btn.disabled = false;
+        btn.textContent = 'Tomar turno';
+      }
+    });
+  </script>
+</body>
+</html>

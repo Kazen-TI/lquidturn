@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Tu turno · LiquidTurn</title>
+  <meta name="theme-color" content="#0f172a" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes pulse-ring {
+      0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.6); }
+      70% { box-shadow: 0 0 0 30px rgba(245, 158, 11, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+    }
+    .turno-llamado { animation: pulse-ring 1.5s infinite; }
+    @keyframes bounce-in {
+      0% { transform: scale(0.6); opacity: 0; }
+      60% { transform: scale(1.08); opacity: 1; }
+      100% { transform: scale(1); }
+    }
+    .bounce-in { animation: bounce-in 0.5s ease-out; }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-slate-100 flex items-center justify-center p-4">
+  <div id="root" class="w-full max-w-md text-center">
+    <div class="text-slate-400">Cargando...</div>
+  </div>
+
+  <!-- Vista: esperando -->
+  <template id="tpl-esperando">
+    <div>
+      <p class="text-slate-400 text-sm uppercase tracking-wider">Tu turno</p>
+      <div class="my-4 inline-flex items-center justify-center w-32 h-32 rounded-full bg-slate-800 border-4 border-amber-500/40 bounce-in">
+        <span class="text-5xl font-bold text-amber-400" data-numero></span>
+      </div>
+      <h1 class="text-xl font-semibold" data-nombre></h1>
+      <p class="text-slate-400 text-sm" data-ruta></p>
+
+      <div class="mt-8 bg-slate-800/60 backdrop-blur rounded-2xl p-6 border border-slate-700">
+        <p class="text-slate-400 text-sm">Personas antes de ti</p>
+        <p class="text-7xl font-bold mt-2" data-adelante>—</p>
+        <p class="text-slate-500 text-sm mt-3" data-mensaje>Te avisaremos cuando sea tu turno.</p>
+      </div>
+
+      <button id="btnCancelar" class="mt-6 text-sm text-slate-400 hover:text-rose-400 underline">
+        Cancelar mi turno
+      </button>
+    </div>
+  </template>
+
+  <!-- Vista: tu turno -->
+  <template id="tpl-atendiendo">
+    <div>
+      <p class="text-amber-400 text-sm uppercase tracking-wider font-semibold">¡Es tu turno!</p>
+      <div class="my-4 inline-flex items-center justify-center w-40 h-40 rounded-full bg-amber-500 text-slate-900 turno-llamado bounce-in">
+        <span class="text-6xl font-bold" data-numero></span>
+      </div>
+      <h1 class="text-2xl font-bold" data-nombre></h1>
+      <p class="text-slate-400" data-ruta></p>
+
+      <div class="mt-8 bg-amber-500/10 border border-amber-500/40 rounded-2xl p-6">
+        <p class="text-amber-300 text-lg font-semibold">Pasa con el liquidador</p>
+        <p class="text-slate-300 text-sm mt-2">Te llamamos al celular que registraste.</p>
+      </div>
+    </div>
+  </template>
+
+  <!-- Vista: terminado -->
+  <template id="tpl-terminado">
+    <div>
+      <div class="my-4 inline-flex items-center justify-center w-24 h-24 rounded-full bg-emerald-500/20 border-2 border-emerald-500/50">
+        <svg class="w-12 h-12 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+        </svg>
+      </div>
+      <h1 class="text-2xl font-bold">Turno completado</h1>
+      <p class="text-slate-400 mt-2">¡Gracias por usar LiquidTurn!</p>
+      <a href="/" class="inline-block mt-6 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold py-3 px-6 rounded-lg">
+        Tomar otro turno
+      </a>
+    </div>
+  </template>
+
+  <!-- Vista: cancelado -->
+  <template id="tpl-cancelado">
+    <div>
+      <div class="my-4 inline-flex items-center justify-center w-24 h-24 rounded-full bg-slate-700 border-2 border-slate-600">
+        <svg class="w-12 h-12 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </div>
+      <h1 class="text-2xl font-bold">Turno cancelado</h1>
+      <a href="/" class="inline-block mt-6 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold py-3 px-6 rounded-lg">
+        Tomar otro turno
+      </a>
+    </div>
+  </template>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const id = params.get('id');
+    if (!id) location.href = '/';
+
+    const root = document.getElementById('root');
+    let estadoActual = null;
+    let yaNotificado = false;
+
+    function render(tpl, data) {
+      const node = document.getElementById(tpl).content.cloneNode(true);
+      for (const [k, v] of Object.entries(data || {})) {
+        const el = node.querySelector(`[data-${k}]`);
+        if (el) el.textContent = v;
+      }
+      root.innerHTML = '';
+      root.appendChild(node);
+
+      const btnC = document.getElementById('btnCancelar');
+      if (btnC) btnC.onclick = cancelar;
+    }
+
+    function mensajeFila(adelante) {
+      if (adelante === 0) return 'Eres el siguiente.';
+      if (adelante === 1) return 'Hay 1 persona antes de ti.';
+      return `Hay ${adelante} personas antes de ti.`;
+    }
+
+    async function refrescar() {
+      try {
+        const r = await fetch(`/api/tickets/${id}`);
+        if (!r.ok) {
+          root.innerHTML = '<div class="text-rose-400">No se encontró tu turno.</div>';
+          return;
+        }
+        const { ticket, adelante } = await r.json();
+        const cambiaA = ticket.estado;
+
+        if (cambiaA === 'esperando') {
+          render('tpl-esperando', {
+            numero: ticket.numero,
+            nombre: ticket.nombre,
+            ruta: 'Ruta ' + ticket.ruta,
+            adelante,
+            mensaje: mensajeFila(adelante),
+          });
+        } else if (cambiaA === 'atendiendo') {
+          render('tpl-atendiendo', {
+            numero: ticket.numero,
+            nombre: ticket.nombre,
+            ruta: 'Ruta ' + ticket.ruta,
+          });
+          if (!yaNotificado) {
+            yaNotificado = true;
+            notificarUsuario();
+          }
+        } else if (cambiaA === 'terminado') {
+          render('tpl-terminado', {});
+        } else if (cambiaA === 'cancelado') {
+          render('tpl-cancelado', {});
+        }
+        estadoActual = cambiaA;
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function notificarUsuario() {
+      // Sonido (3 beeps)
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const tonos = [880, 660, 880];
+        tonos.forEach((freq, i) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = freq;
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          const t0 = ctx.currentTime + i * 0.45;
+          gain.gain.setValueAtTime(0, t0);
+          gain.gain.linearRampToValueAtTime(0.4, t0 + 0.05);
+          gain.gain.linearRampToValueAtTime(0, t0 + 0.35);
+          osc.start(t0);
+          osc.stop(t0 + 0.4);
+        });
+      } catch (e) { /* sin audio */ }
+
+      // Vibración (móviles)
+      if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 600]);
+
+      // Notificación del navegador (si lo permitió)
+      if (Notification && Notification.permission === 'granted') {
+        new Notification('¡Es tu turno!', {
+          body: 'Pasa con el liquidador para tu liquidación.',
+          icon: '/icon.png'
+        });
+      }
+
+      // Título parpadeante
+      let on = true;
+      const titulo = document.title;
+      const blink = setInterval(() => {
+        document.title = on ? '⭐ ¡TU TURNO!' : titulo;
+        on = !on;
+      }, 800);
+      window.addEventListener('focus', () => {
+        clearInterval(blink);
+        document.title = titulo;
+      }, { once: true });
+    }
+
+    async function cancelar() {
+      if (!confirm('¿Cancelar tu turno? Tendrías que volver a tomar uno nuevo.')) return;
+      await fetch(`/api/tickets/${id}/cancelar`, { method: 'POST' });
+      refrescar();
+    }
+
+    // Solicitar permiso de notificaciones (best-effort, requiere gesto en algunos navegadores)
+    if (Notification && Notification.permission === 'default') {
+      // se intentará en el primer click
+      document.addEventListener('click', () => {
+        Notification.requestPermission();
+      }, { once: true });
+    }
+
+    // SSE: actualización en tiempo real
+    function conectarStream() {
+      const es = new EventSource('/api/stream');
+      es.addEventListener('update', () => refrescar());
+      es.onerror = () => {
+        // EventSource intenta reconectar automáticamente. Mantenemos fallback de polling.
+      };
+    }
+
+    refrescar();
+    conectarStream();
+    // Fallback: refrescar cada 10s por si el SSE se cae
+    setInterval(refrescar, 10000);
+  </script>
+</body>
+</html>
