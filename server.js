@@ -1,6 +1,7 @@
 // LiquidTurn — Servidor Express + JSON store + SSE
 // Sistema de turnos para liquidación de gastos de vendedores Kazen
 
+require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
